@@ -1,0 +1,67 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway-service
+  cloud:
+    gateway:
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns:
+              - "http://localhost:*"
+              - "http://127.0.0.1:*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - PATCH
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+            maxAge: 3600
+
+      routes:
+        # 1. Identity Service (Auth, Users, JWT)
+        - id: identity-service
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/v1/auth/**
+
+        # 2. Supplier & Warehouse Service
+        - id: supplier-service
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/v1/suppliers/**, /api/v1/warehouses/**
+
+        # 3. Catalog Service (Products, Categories, Search, 3D-Combos)
+        - id: catalog-service
+          uri: http://localhost:8083
+          predicates:
+            - Path=/api/v1/products/**, /api/v1/categories/**
+
+        # 4. Aquarium 3D Service (BOM Exploded View, Biology Engine, 3D Designs)
+        - id: aquarium-3d-service
+          uri: http://localhost:8084
+          predicates:
+            - Path=/api/v1/3d/**
+
+        # 5. Inventory Service
+        - id: inventory-service
+          uri: http://localhost:8085
+          predicates:
+            - Path=/api/v1/inventory/**
+
+        # 6. Order & Cart Service
+        - id: order-service
+          uri: http://localhost:8086
+          predicates:
+            - Path=/api/v1/orders/**, /api/v1/cart/**, /api/v1/carts/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info
