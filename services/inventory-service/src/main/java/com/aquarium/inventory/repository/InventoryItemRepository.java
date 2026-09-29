@@ -1,10 +1,14 @@
 package com.aquarium.inventory.repository;
 
 import com.aquarium.inventory.entity.InventoryItem;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -15,6 +19,18 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, UU
     List<InventoryItem> findByProductVariantId(UUID productVariantId);
     List<InventoryItem> findByWarehouseId(UUID warehouseId);
 
+    /** Khóa dòng tồn kho (SELECT ... FOR UPDATE) trước khi đọc-kiểm-ghi → không bán vượt tồn. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT i FROM InventoryItem i WHERE i.warehouseId = :warehouseId AND i.productVariantId = :variantId")
+    Optional<InventoryItem> lockByWarehouseAndVariant(@Param("warehouseId") UUID warehouseId, @Param("variantId") UUID variantId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT i FROM InventoryItem i WHERE i.id = :id")
+    Optional<InventoryItem> lockById(@Param("id") UUID id);
+
     @Query("SELECT i FROM InventoryItem i WHERE (i.stockQuantity - i.reservedQuantity) <= i.lowStockThreshold")
     List<InventoryItem> findLowStockItems();
+
+    @Query("SELECT i FROM InventoryItem i WHERE i.warehouseId IN :warehouseIds AND (i.stockQuantity - i.reservedQuantity) <= i.lowStockThreshold")
+    List<InventoryItem> findLowStockItemsInWarehouses(@Param("warehouseIds") Collection<UUID> warehouseIds);
 }

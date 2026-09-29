@@ -24,6 +24,13 @@ public class InventoryItemResponse {
     private Boolean isLowStock;
     private Instant updatedAt;
 
+    /** Thông tin hiển thị (tra từ bảng sản phẩm) — chỉ điền cho màn hình quản lý kho. */
+    private UUID productId;
+    private String productName;
+    private String variantName;
+    private String sku;
+    private Boolean livestock;
+
     public static InventoryItemResponse fromEntity(InventoryItem item) {
         if (item == null) return null;
         int available = item.getAvailableQuantity();

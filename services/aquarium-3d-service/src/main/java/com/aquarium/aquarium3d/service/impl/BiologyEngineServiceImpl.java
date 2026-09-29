@@ -17,6 +17,9 @@ import java.util.*;
 @RequiredArgsConstructor
 public class BiologyEngineServiceImpl implements BiologyEngineService {
 
+    /** Tải sinh học tối đa = 80% thể tích bể (heuristic đơn giản). */
+    private static final double BIOLOAD_CAPACITY_PER_LITER = 0.8;
+
     private final BiologicalRuleRepository biologicalRuleRepository;
     private final SpeciesCompatibilityRepository speciesCompatibilityRepository;
 
@@ -29,82 +32,85 @@ public class BiologyEngineServiceImpl implements BiologyEngineService {
     @Override
     @Transactional(readOnly = true)
     public CompatibilityCheckResponse checkCompatibility(CompatibilityCheckRequest request) {
-        List<Integer> speciesIds = request.getSpeciesIds();
-        Double tankVolume = request.getTankVolumeLiters();
+        List<Integer> speciesIds = request.getSpeciesIds().stream().filter(Objects::nonNull).distinct().toList();
+        double tankVolume = request.getTankVolumeLiters();
+        Map<Integer, Integer> quantities = request.getQuantities() != null ? request.getQuantities() : Map.of();
 
-        List<BiologicalRule> selectedRules = biologicalRuleRepository.findAllById(speciesIds);
+        Map<Integer, BiologicalRule> rules = new HashMap<>();
+        biologicalRuleRepository.findAllById(speciesIds).forEach(rule -> rules.put(rule.getId(), rule));
+
         List<String> warnings = new ArrayList<>();
-        boolean isCompatible = true;
-
+        boolean compatible = true;
         double totalBioload = 0.0;
-        double minPhRequired = 0.0;
-        double maxPhRequired = 14.0;
-        double minTempRequired = 0.0;
-        double maxTempRequired = 40.0;
+        double minPh = 0.0;
+        double maxPh = 14.0;
+        double minTemp = 0.0;
+        double maxTemp = 40.0;
 
-        for (BiologicalRule rule : selectedRules) {
-            // Check minimum tank volume
+        for (Integer speciesId : speciesIds) {
+            BiologicalRule rule = rules.get(speciesId);
+            if (rule == null) {
+                warnings.add("Không có dữ liệu sinh học cho loài có mã " + speciesId + " — chưa thể đánh giá.");
+                continue;
+            }
+            int schoolMin = rule.getSchoolMinQuantity() != null ? Math.max(rule.getSchoolMinQuantity(), 1) : 1;
+            Integer requested = quantities.get(speciesId);
+            int quantity = requested != null ? requested : schoolMin;
+
             if (tankVolume < rule.getMinTankLiters().doubleValue()) {
-                warnings.add("Cảnh báo: Loài '" + rule.getSpeciesName() + "' yêu cầu thể tích bể tối thiểu " 
-                        + rule.getMinTankLiters() + "L (Bể hiện tại: " + tankVolume + "L)");
-                isCompatible = false;
+                warnings.add("Loài '" + rule.getSpeciesName() + "' cần bể tối thiểu " + rule.getMinTankLiters()
+                        + "L (bể hiện tại: " + tankVolume + "L).");
+                compatible = false;
+            }
+            if (requested != null && requested < schoolMin) {
+                warnings.add("Loài '" + rule.getSpeciesName() + "' nên nuôi theo đàn từ " + schoolMin
+                        + " con trở lên (hiện có " + requested + ") để tránh stress.");
             }
 
-            // Accumulate bio-load
-            totalBioload += rule.getBioloadFactor().doubleValue() * 5.0; // Default estimate 5 specimens
+            double factor = rule.getBioloadFactor() != null ? rule.getBioloadFactor().doubleValue() : 1.0;
+            totalBioload += factor * quantity;
 
-            // Intersect pH range
-            minPhRequired = Math.max(minPhRequired, rule.getPhMin().doubleValue());
-            maxPhRequired = Math.min(maxPhRequired, rule.getPhMax().doubleValue());
-
-            // Intersect Temp range
-            minTempRequired = Math.max(minTempRequired, rule.getTempMin().doubleValue());
-            maxTempRequired = Math.min(maxTempRequired, rule.getTempMax().doubleValue());
+            minPh = Math.max(minPh, rule.getPhMin().doubleValue());
+            maxPh = Math.min(maxPh, rule.getPhMax().doubleValue());
+            minTemp = Math.max(minTemp, rule.getTempMin().doubleValue());
+            maxTemp = Math.min(maxTemp, rule.getTempMax().doubleValue());
         }
 
-        // Check pH overlap
-        if (minPhRequired > maxPhRequired) {
-            warnings.add("Xung đột môi trường nước: Biên độ pH yêu cầu giữa các loài không giao nhau (" 
-                    + minPhRequired + " > " + maxPhRequired + ")");
-            isCompatible = false;
+        if (minPh > maxPh) {
+            warnings.add("Xung đột môi trường nước: khoảng pH phù hợp của các loài không giao nhau (" + minPh + " > " + maxPh + ").");
+            compatible = false;
+        }
+        if (minTemp > maxTemp) {
+            warnings.add("Xung đột nhiệt độ: khoảng nhiệt độ phù hợp của các loài không giao nhau (" + minTemp + "°C > " + maxTemp + "°C).");
+            compatible = false;
         }
 
-        // Check Temperature overlap
-        if (minTempRequired > maxTempRequired) {
-            warnings.add("Xung đột nhiệt độ: Nhiệt độ thích hợp giữa các loài không tương thích (" 
-                    + minTempRequired + "°C > " + maxTempRequired + "°C)");
-            isCompatible = false;
-        }
-
-        // Check Pairwise compatibility in database
-        for (int i = 0; i < speciesIds.size(); i++) {
-            for (int j = i + 1; j < speciesIds.size(); j++) {
-                Optional<SpeciesCompatibility> compat = speciesCompatibilityRepository.findCompatibility(speciesIds.get(i), speciesIds.get(j));
-                if (compat.isPresent() && !compat.get().getIsCompatible()) {
-                    warnings.add("Xung đột sinh học: " + compat.get().getConflictReason());
-                    isCompatible = false;
+        List<Integer> known = speciesIds.stream().filter(rules::containsKey).toList();
+        for (int i = 0; i < known.size(); i++) {
+            for (int j = i + 1; j < known.size(); j++) {
+                Optional<SpeciesCompatibility> pair = speciesCompatibilityRepository.findCompatibility(known.get(i), known.get(j));
+                if (pair.isPresent() && !Boolean.TRUE.equals(pair.get().getIsCompatible())) {
+                    warnings.add("Xung đột sinh học: " + pair.get().getConflictReason());
+                    compatible = false;
                 }
             }
         }
 
-        double maxBioCapacity = tankVolume * 0.8;
-        boolean isBioSafe = totalBioload <= maxBioCapacity;
-        if (!isBioSafe) {
-            warnings.add("Cảnh báo tải sinh học (Bio-load): Mật độ sinh vật quá cao (" 
-                    + Math.round(totalBioload) + " / " + Math.round(maxBioCapacity) + " capacity), nguy cơ làm đục nước hoặc bùng phát rêu hại.");
+        double capacity = tankVolume * BIOLOAD_CAPACITY_PER_LITER;
+        boolean bioLoadSafe = totalBioload <= capacity;
+        if (!bioLoadSafe) {
+            warnings.add("Mật độ sinh vật quá cao (" + Math.round(totalBioload) + " / " + Math.round(capacity)
+                    + "), nguy cơ đục nước hoặc bùng phát rêu hại.");
         }
 
-        String phRange = (minPhRequired <= maxPhRequired) ? (minPhRequired + " - " + maxPhRequired) : "Không tương thích";
-        String tempRange = (minTempRequired <= maxTempRequired) ? (minTempRequired + "°C - " + maxTempRequired + "°C") : "Không tương thích";
-
         return CompatibilityCheckResponse.builder()
-                .isCompatible(isCompatible && isBioSafe)
+                .compatible(compatible && bioLoadSafe)
                 .totalBioLoad(Math.round(totalBioload * 10.0) / 10.0)
-                .maxBioLoadCapacity(Math.round(maxBioCapacity * 10.0) / 10.0)
-                .isBioLoadSafe(isBioSafe)
+                .maxBioLoadCapacity(Math.round(capacity * 10.0) / 10.0)
+                .bioLoadSafe(bioLoadSafe)
                 .warnings(warnings)
-                .recommendedPhRange(phRange)
-                .recommendedTempRange(tempRange)
+                .recommendedPhRange(minPh <= maxPh ? minPh + " - " + maxPh : "Không tương thích")
+                .recommendedTempRange(minTemp <= maxTemp ? minTemp + "°C - " + maxTemp + "°C" : "Không tương thích")
                 .build();
     }
 }

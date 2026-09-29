@@ -24,6 +24,8 @@ public class MortalityLogResponse {
     private UUID loggedBy;
     private Instant loggedAt;
     private Integer remainingStockQuantity;
+    /** true nếu sau hao hụt, lượng đang giữ cho đơn hàng lớn hơn tồn kho thực tế. */
+    private Boolean reservationShortfall;
 
     public static MortalityLogResponse fromEntity(MortalityLog log, Integer remainingStock) {
         if (log == null) return null;

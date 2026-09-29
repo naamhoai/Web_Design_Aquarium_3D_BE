@@ -51,6 +51,10 @@ public class OrderItem {
     @Column(name = "bom_parent_sku", length = 100)
     private String bomParentSku;
 
+    /** Kho đã giữ hàng cho dòng này — dùng để nhả hàng khi hủy và trừ kho khi giao. */
+    @Column(name = "warehouse_id")
+    private UUID warehouseId;
+
     @Builder.Default
     @Column(name = "is_livestock")
     private Boolean isLivestock = false;

@@ -1,7 +1,12 @@
 server:
   port: 8081
+  # Chỉ lắng nghe trên localhost: client phải đi qua API Gateway (:8080)
+  address: ${SERVICE_BIND_ADDRESS:127.0.0.1}
   servlet:
     context-path: /
+  error:
+    include-message: never
+    include-stacktrace: never
 
 spring:
   application:
@@ -9,7 +14,8 @@ spring:
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:aquarium_db}
     username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:276204}
+    # Không có giá trị mặc định: bắt buộc đặt biến môi trường POSTGRES_PASSWORD (xem .env.example)
+    password: ${POSTGRES_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -17,23 +23,39 @@ spring:
       idle-timeout: 30000
       connection-timeout: 20000
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: none
-    show-sql: true
+    show-sql: ${SHOW_SQL:false}
     properties:
       hibernate:
         format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
 
 jwt:
-  secret: ${JWT_SECRET:super-secret-aquarium-jwt-token-key-2026-min-32-chars-length}
-  access-token-expiration-seconds: 86400      # 1 Day
-  refresh-token-expiration-seconds: 604800    # 7 Days
+  # Bắt buộc: chuỗi ngẫu nhiên >= 32 ký tự, giống nhau ở mọi service. Không commit giá trị thật.
+  secret: ${JWT_SECRET}
+  access-token-ttl: ${JWT_ACCESS_TTL:15m}
+  refresh-token-ttl: ${JWT_REFRESH_TTL:7d}
+
+auth:
+  refresh-cookie:
+    secure: ${AUTH_COOKIE_SECURE:true}
+
+aquarium:
+  security:
+    public-endpoints:
+      - POST /api/v1/auth/register
+      - POST /api/v1/auth/login
+      - POST /api/v1/auth/refresh
+      - POST /api/v1/auth/logout
+    max-request-bytes: 16384
 
 springdoc:
   api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
     path: /v3/api-docs
   swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
     path: /swagger-ui.html
     tags-sorter: alpha
     operations-sorter: method

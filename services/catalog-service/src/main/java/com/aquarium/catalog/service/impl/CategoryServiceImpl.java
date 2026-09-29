@@ -40,7 +40,8 @@ public class CategoryServiceImpl implements CategoryService {
     @Transactional(readOnly = true)
     public CategoryResponse getCategoryBySlug(String slug) {
         Category category = categoryRepository.findBySlug(slug)
-                .orElseThrow(() -> new AppException(ErrorCode.INVALID_KEY, "Danh mục không tồn tại"));
+                .filter(c -> Boolean.TRUE.equals(c.getIsActive()))
+                .orElseThrow(() -> new AppException(ErrorCode.RESOURCE_NOT_FOUND, "Danh mục không tồn tại"));
         return mapToResponse(category);
     }
 

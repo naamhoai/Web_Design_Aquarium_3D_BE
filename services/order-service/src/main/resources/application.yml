@@ -1,5 +1,7 @@
 server:
   port: 8086
+  # Chỉ lắng nghe trên localhost: client phải đi qua API Gateway (:8080)
+  address: ${SERVICE_BIND_ADDRESS:127.0.0.1}
   servlet:
     context-path: /
 
@@ -9,7 +11,8 @@ spring:
   datasource:
     url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:aquarium_db}
     username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:276204}
+    # Không có giá trị mặc định: bắt buộc đặt biến môi trường POSTGRES_PASSWORD (xem .env.example)
+    password: ${POSTGRES_PASSWORD}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -17,17 +20,35 @@ spring:
       idle-timeout: 30000
       connection-timeout: 20000
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: none
-    show-sql: true
+    show-sql: ${SHOW_SQL:false}
     properties:
       hibernate:
         format_sql: true
 
+jwt:
+  secret: ${JWT_SECRET}
+
+order:
+  shipping:
+    # Phí vận chuyển do server quyết định (VND / đơn hàng)
+    flat-fee: ${ORDER_SHIPPING_FLAT_FEE:50000}
+
+aquarium:
+  security:
+    # Mọi endpoint của order-service đều yêu cầu đăng nhập, trừ báo giá giỏ hàng (giá là dữ liệu công khai)
+    public-endpoints:
+      - POST /api/v1/orders/quote
+    max-request-bytes: 65536
+
 springdoc:
   api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
     path: /v3/api-docs
   swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
     path: /swagger-ui.html
     tags-sorter: alpha
     operations-sorter: method

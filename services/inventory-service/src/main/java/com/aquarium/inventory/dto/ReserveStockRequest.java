@@ -1,7 +1,9 @@
 package com.aquarium.inventory.dto;
 
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -23,8 +25,10 @@ public class ReserveStockRequest {
 
     @NotNull(message = "quantity is required")
     @Min(value = 1, message = "quantity must be at least 1")
+    @Max(value = 100000, message = "quantity must be at most 100000")
     private Integer quantity;
 
     private UUID referenceOrderId;
+    @Size(max = 500, message = "note is too long")
     private String note;
 }

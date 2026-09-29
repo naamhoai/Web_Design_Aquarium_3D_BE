@@ -1,3 +1,6 @@
+-- Đảm bảo psql đọc đúng tiếng Việt dù chạy từ PowerShell/CMD với code page khác
+SET client_encoding = 'UTF8';
+
 -- ==============================================================================
 -- DATABASE SCHEMA: AQUARIUM 3D E-COMMERCE & MULTI-WAREHOUSE PLATFORM
 -- Version: 1.0.0 (Supports 158 Use Cases)
@@ -163,6 +166,8 @@ CREATE TABLE IF NOT EXISTS refresh_tokens (
     token TEXT UNIQUE NOT NULL,
     expires_at TIMESTAMPTZ NOT NULL,
     revoked BOOLEAN DEFAULT FALSE,
+    revoked_at TIMESTAMPTZ,
+    replaced_by UUID,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -468,6 +473,7 @@ CREATE TABLE IF NOT EXISTS order_items (
     subtotal NUMERIC(15,2) NOT NULL CHECK (subtotal >= 0),
     layer_index INT,
     bom_parent_sku VARCHAR(100),
+    warehouse_id UUID REFERENCES warehouses(id) ON DELETE SET NULL,
     is_livestock BOOLEAN DEFAULT FALSE,
     is_fragile_glass BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -648,6 +654,8 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
 CREATE INDEX IF NOT EXISTS idx_user_addresses_user_id ON user_addresses(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON refresh_tokens(user_id);
+CREATE INDEX IF NOT EXISTS idx_refresh_tokens_expires_at ON refresh_tokens(expires_at);
 CREATE INDEX IF NOT EXISTS idx_suppliers_slug ON suppliers(slug);
 CREATE INDEX IF NOT EXISTS idx_warehouses_supplier_id ON warehouses(supplier_id);
 CREATE INDEX IF NOT EXISTS idx_categories_slug ON categories(slug);

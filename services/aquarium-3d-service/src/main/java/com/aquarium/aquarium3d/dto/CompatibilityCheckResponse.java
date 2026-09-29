@@ -1,5 +1,6 @@
 package com.aquarium.aquarium3d.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 import java.util.List;
@@ -10,10 +11,13 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class CompatibilityCheckResponse {
-    private boolean isCompatible;
+    /** Đặt tên field không có tiền tố "is" + @JsonProperty để JSON luôn là "isCompatible" (trước đây bị đổi thành "compatible"). */
+    @JsonProperty("isCompatible")
+    private boolean compatible;
     private Double totalBioLoad;
     private Double maxBioLoadCapacity;
-    private boolean isBioLoadSafe;
+    @JsonProperty("isBioLoadSafe")
+    private boolean bioLoadSafe;
     private List<String> warnings;
     private String recommendedPhRange;
     private String recommendedTempRange;

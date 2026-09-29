@@ -2,6 +2,7 @@ package com.aquarium.supplier.dto;
 
 import com.aquarium.supplier.entity.Supplier;
 import com.aquarium.supplier.entity.SupplierStatus;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -15,6 +16,7 @@ import java.util.UUID;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class SupplierResponse {
     private UUID id;
     private UUID userId;
@@ -31,23 +33,34 @@ public class SupplierResponse {
     private SupplierStatus status;
     private Instant createdAt;
 
+    /** Bản đầy đủ: chỉ dành cho chủ shop và admin. */
     public static SupplierResponse fromEntity(Supplier supplier) {
+        return fromEntity(supplier, true);
+    }
+
+    /**
+     * @param includePrivate false => ẩn thông tin nội bộ (giấy phép, mã số thuế, hoa hồng, userId)
+     *                       khi hiển thị trang gian hàng công khai.
+     */
+    public static SupplierResponse fromEntity(Supplier supplier, boolean includePrivate) {
         if (supplier == null) return null;
-        return SupplierResponse.builder()
+        SupplierResponseBuilder builder = SupplierResponse.builder()
                 .id(supplier.getId())
-                .userId(supplier.getUserId())
                 .storeName(supplier.getStoreName())
                 .slug(supplier.getSlug())
                 .description(supplier.getDescription())
                 .logoUrl(supplier.getLogoUrl())
                 .bannerUrl(supplier.getBannerUrl())
-                .businessLicense(supplier.getBusinessLicense())
-                .taxCode(supplier.getTaxCode())
                 .rating(supplier.getRating())
                 .reviewCount(supplier.getReviewCount())
-                .commissionRate(supplier.getCommissionRate())
                 .status(supplier.getStatus())
-                .createdAt(supplier.getCreatedAt())
-                .build();
+                .createdAt(supplier.getCreatedAt());
+        if (includePrivate) {
+            builder.userId(supplier.getUserId())
+                    .businessLicense(supplier.getBusinessLicense())
+                    .taxCode(supplier.getTaxCode())
+                    .commissionRate(supplier.getCommissionRate());
+        }
+        return builder.build();
     }
 }

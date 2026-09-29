@@ -14,7 +14,7 @@
     <artifactId>common-core</artifactId>
     <packaging>jar</packaging>
     <name>Common Core Library</name>
-    <description>Shared DTOs, Event Models, Response Conventions and Exception Handlers</description>
+    <description>Shared DTOs, Event Models, Response Conventions, Exception Handlers and Security (JWT)</description>
 
     <dependencies>
         <dependency>
@@ -25,6 +25,33 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
+
+        <!-- Security dùng chung: mọi service xác thực JWT và áp quy tắc phân quyền giống nhau -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- Để GlobalExceptionHandler nhận diện lỗi ràng buộc dữ liệu (DataIntegrityViolationException) -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-tx</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

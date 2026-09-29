@@ -28,4 +28,10 @@ public class ProductSummaryResponse {
     private Integer totalSales;
     private BigDecimal rating;
     private String thumbnailUrl;
+
+    /** Biến thể mặc định — frontend dùng SKU này để đặt hàng; giá thật do server tính lại khi checkout. */
+    private UUID defaultVariantId;
+    private String defaultVariantSku;
+    private BigDecimal price;
+    private BigDecimal originalPrice;
 }

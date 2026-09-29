@@ -1,3 +1,6 @@
+-- Đảm bảo psql đọc đúng tiếng Việt dù chạy từ PowerShell/CMD với code page khác
+SET client_encoding = 'UTF8';
+
 -- ==============================================================================
 -- SEED DATA: AQUARIUM 3D E-COMMERCE & MULTI-WAREHOUSE PLATFORM
 -- Realistic production-like seed data covering 6-layer 3D BOM & DOA Livestock
@@ -12,14 +15,15 @@ INSERT INTO roles (name, description) VALUES
 ('TECHNICIAN', 'Kỹ thuật viên chuyên trách giao lắp, set layout và bảo dưỡng tại nhà')
 ON CONFLICT (name) DO NOTHING;
 
--- 2. SEED USERS (Password hashes are bcrypt/argon placeholders for initial dev)
--- Default initial dev password for these mock users is: Dev@123456
+-- 2. SEED USERS — CHỈ DÙNG CHO MÔI TRƯỜNG DEV
+-- Mật khẩu của các tài khoản mẫu: Dev@123456 (BCrypt cost 12).
+-- ⚠ Trước khi triển khai thật: đổi mật khẩu hoặc xóa các tài khoản này (đặc biệt admin@aquarium3d.vn).
 INSERT INTO users (id, email, password_hash, full_name, phone, role, status, email_verified) VALUES
-('a0000000-0000-0000-0000-000000000001', 'admin@aquarium3d.vn', '$2a$12$e8rG.hP9.Z99.SampleAdminHashPlaceholderDev123', 'Hệ Thống Quản Trị Viên Sàn', '0901234567', 'ADMIN', 'ACTIVE', TRUE),
-('a0000000-0000-0000-0000-000000000002', 'supplier_hanoi@aquarium3d.vn', '$2a$12$e8rG.hP9.Z99.SampleSupplierHashHanoiDev123', 'Nguyễn Thế Hoàng (AquaArt Hà Nội)', '0912345678', 'SUPPLIER', 'ACTIVE', TRUE),
-('a0000000-0000-0000-0000-000000000003', 'supplier_hcm@aquarium3d.vn', '$2a$12$e8rG.hP9.Z99.SampleSupplierHashSaigonDev123', 'Trần Minh Tuấn (Saigon Aqua Studio)', '0987654321', 'SUPPLIER', 'ACTIVE', TRUE),
-('a0000000-0000-0000-0000-000000000004', 'tech_dung@aquarium3d.vn', '$2a$12$e8rG.hP9.Z99.SampleTechHashPlaceholderDev123', 'Lê Quốc Dũng (Master Aquascaper)', '0933445566', 'TECHNICIAN', 'ACTIVE', TRUE),
-('a0000000-0000-0000-0000-000000000005', 'customer_nam@gmail.com', '$2a$12$e8rG.hP9.Z99.SampleCustomerHashPlaceholderDev123', 'Nguyễn Phương Nam', '0977889900', 'CUSTOMER', 'ACTIVE', TRUE)
+('a0000000-0000-0000-0000-000000000001', 'admin@aquarium3d.vn', '$2a$12$W5QIDsm6g7Tz/4FH0zGJQOic5OpLoKrgOYSEmUjxiygYQqW.QMLGO', 'Hệ Thống Quản Trị Viên Sàn', '0901234567', 'ADMIN', 'ACTIVE', TRUE),
+('a0000000-0000-0000-0000-000000000002', 'supplier_hanoi@aquarium3d.vn', '$2a$12$W5QIDsm6g7Tz/4FH0zGJQOic5OpLoKrgOYSEmUjxiygYQqW.QMLGO', 'Nguyễn Thế Hoàng (AquaArt Hà Nội)', '0912345678', 'SUPPLIER', 'ACTIVE', TRUE),
+('a0000000-0000-0000-0000-000000000003', 'supplier_hcm@aquarium3d.vn', '$2a$12$W5QIDsm6g7Tz/4FH0zGJQOic5OpLoKrgOYSEmUjxiygYQqW.QMLGO', 'Trần Minh Tuấn (Saigon Aqua Studio)', '0987654321', 'SUPPLIER', 'ACTIVE', TRUE),
+('a0000000-0000-0000-0000-000000000004', 'tech_dung@aquarium3d.vn', '$2a$12$W5QIDsm6g7Tz/4FH0zGJQOic5OpLoKrgOYSEmUjxiygYQqW.QMLGO', 'Lê Quốc Dũng (Master Aquascaper)', '0933445566', 'TECHNICIAN', 'ACTIVE', TRUE),
+('a0000000-0000-0000-0000-000000000005', 'customer_nam@gmail.com', '$2a$12$W5QIDsm6g7Tz/4FH0zGJQOic5OpLoKrgOYSEmUjxiygYQqW.QMLGO', 'Nguyễn Phương Nam', '0977889900', 'CUSTOMER', 'ACTIVE', TRUE)
 ON CONFLICT (email) DO NOTHING;
 
 -- 3. SEED SUPPLIERS
@@ -119,10 +123,14 @@ INSERT INTO inventory_items (warehouse_id, product_variant_id, stock_quantity, r
 ('c0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000005', 25, 3, 5),
 ('c0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000004', 40, 2, 8),
 ('c0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000006', 60, 0, 15),
-('c0000000-0000-0000-0000-000000000002', 'e0000000-0000-0000-0000-000000000007', 20, 1, 4)
+('c0000000-0000-0000-0000-000000000001', 'e0000000-0000-0000-0000-000000000007', 20, 0, 4)
 ON CONFLICT (warehouse_id, product_variant_id) DO UPDATE SET stock_quantity = EXCLUDED.stock_quantity;
 
--- 12. SEED SYSTEM SETTINGS
+-- 12. ĐỒNG BỘ SEQUENCE (seed ở trên chèn id tường minh cho bảng SERIAL)
+SELECT setval(pg_get_serial_sequence('categories', 'id'), GREATEST((SELECT COALESCE(MAX(id), 0) FROM categories), 1));
+SELECT setval(pg_get_serial_sequence('biological_rules', 'id'), GREATEST((SELECT COALESCE(MAX(id), 0) FROM biological_rules), 1));
+
+-- 13. SEED SYSTEM SETTINGS
 INSERT INTO system_settings (key, value, description) VALUES
 ('platform_commission_rate', '{"default_rate_percent": 8.0, "vip_rate_percent": 5.0}'::jsonb, 'Tỷ lệ hoa hồng chiết khấu sàn cho mỗi đơn hàng thành công'),
 ('doa_policy_hours', '{"video_claim_window_hours": 2, "auto_refund_under_vnd": 500000}'::jsonb, 'Chính sách bảo hành cá sống DOA: Thời hạn người mua gửi video unbox sau khi shipper giao'),

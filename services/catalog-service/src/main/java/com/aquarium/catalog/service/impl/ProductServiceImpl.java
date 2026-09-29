@@ -8,12 +8,12 @@ import com.aquarium.common.exception.AppException;
 import com.aquarium.common.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -26,76 +26,90 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<ProductSummaryResponse> getProducts(Integer categoryId, Boolean isCombo, Boolean is3dCustomizable, Pageable pageable) {
-        Page<Product> productPage;
-        if (categoryId != null) {
-            productPage = productRepository.findByCategoryIdAndStatus(categoryId, ProductStatus.ACTIVE, pageable);
-        } else {
-            productPage = productRepository.findByStatus(ProductStatus.ACTIVE, pageable);
-        }
-
-        return productPage.map(this::mapToSummary);
+    public Page<ProductSummaryResponse> getProducts(ProductSpecifications.Filter filter, Pageable pageable) {
+        Page<Product> productPage = productRepository.findAll(ProductSpecifications.visible(filter), pageable);
+        return new PageImpl<>(mapSummaries(productPage.getContent()), pageable, productPage.getTotalElements());
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<ProductSummaryResponse> searchProducts(String keyword, Pageable pageable) {
-        Page<Product> productPage = productRepository.searchProducts(keyword, ProductStatus.ACTIVE, pageable);
-        return productPage.map(this::mapToSummary);
+        Page<Product> productPage = productRepository.searchProducts(escapeLike(keyword.trim()), ProductStatus.ACTIVE, pageable);
+        return new PageImpl<>(mapSummaries(productPage.getContent()), pageable, productPage.getTotalElements());
     }
 
     @Override
     @Transactional(readOnly = true)
     public List<ProductSummaryResponse> get3dCombos() {
-        List<Product> combos = productRepository.findByIsComboTrueAndStatus(ProductStatus.ACTIVE);
-        return combos.stream().map(this::mapToSummary).collect(Collectors.toList());
+        return mapSummaries(productRepository.findByIsComboTrueAndStatusAndDeletedAtIsNull(ProductStatus.ACTIVE));
     }
 
     @Override
     @Transactional(readOnly = true)
     public ProductDetailResponse getProductBySlug(String slug) {
-        Product product = productRepository.findBySlug(slug)
-                .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND, "Không tìm thấy sản phẩm với slug: " + slug));
-
+        Product product = productRepository.findBySlugAndStatusAndDeletedAtIsNull(slug, ProductStatus.ACTIVE)
+                .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
         return buildProductDetail(product);
     }
 
     @Override
     @Transactional(readOnly = true)
     public ProductDetailResponse getProductById(UUID id) {
-        Product product = productRepository.findById(id)
-                .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND, "Không tìm thấy sản phẩm với id: " + id));
-
+        Product product = productRepository.findByIdAndStatusAndDeletedAtIsNull(id, ProductStatus.ACTIVE)
+                .orElseThrow(() -> new AppException(ErrorCode.PRODUCT_NOT_FOUND));
         return buildProductDetail(product);
     }
 
-    private ProductSummaryResponse mapToSummary(Product product) {
-        List<ProductImage> images = productImageRepository.findByProductIdOrderBySortOrderAsc(product.getId());
-        String thumbnailUrl = images.isEmpty() ? null : images.get(0).getImageUrl();
+    /** Nạp biến thể & ảnh theo lô (tránh N+1 query) rồi ghép vào từng sản phẩm. */
+    private List<ProductSummaryResponse> mapSummaries(List<Product> products) {
+        if (products.isEmpty()) {
+            return List.of();
+        }
+        List<UUID> ids = products.stream().map(Product::getId).toList();
 
-        return ProductSummaryResponse.builder()
-                .id(product.getId())
-                .supplierId(product.getSupplierId())
-                .categoryId(product.getCategoryId())
-                .name(product.getName())
-                .slug(product.getSlug())
-                .sku(product.getSku())
-                .shortDescription(product.getShortDescription())
-                .basePrice(product.getBasePrice())
-                .isCombo(product.getIsCombo())
-                .is3dCustomizable(product.getIs3dCustomizable())
-                .isLivestock(product.getIsLivestock())
-                .isFragileGlass(product.getIsFragileGlass())
-                .status(product.getStatus())
-                .totalSales(product.getTotalSales())
-                .rating(product.getRating())
-                .thumbnailUrl(thumbnailUrl)
-                .build();
+        Map<UUID, ProductVariant> defaultVariants = new HashMap<>();
+        for (ProductVariant variant : productVariantRepository.findByProductIdInAndIsActiveTrueOrderByCreatedAtAscSkuAsc(ids)) {
+            defaultVariants.putIfAbsent(variant.getProductId(), variant);
+        }
+
+        Map<UUID, String> thumbnails = new HashMap<>();
+        Map<UUID, List<ProductImage>> imagesByProduct = productImageRepository.findByProductIdInOrderBySortOrderAsc(ids).stream()
+                .collect(Collectors.groupingBy(ProductImage::getProductId));
+        imagesByProduct.forEach((productId, images) -> images.stream()
+                .filter(img -> Boolean.TRUE.equals(img.getIsThumbnail()))
+                .findFirst()
+                .or(() -> images.stream().findFirst())
+                .ifPresent(img -> thumbnails.put(productId, img.getImageUrl())));
+
+        return products.stream().map(product -> {
+            ProductVariant variant = defaultVariants.get(product.getId());
+            return ProductSummaryResponse.builder()
+                    .id(product.getId())
+                    .supplierId(product.getSupplierId())
+                    .categoryId(product.getCategoryId())
+                    .name(product.getName())
+                    .slug(product.getSlug())
+                    .sku(product.getSku())
+                    .shortDescription(product.getShortDescription())
+                    .basePrice(product.getBasePrice())
+                    .isCombo(product.getIsCombo())
+                    .is3dCustomizable(product.getIs3dCustomizable())
+                    .isLivestock(product.getIsLivestock())
+                    .isFragileGlass(product.getIsFragileGlass())
+                    .status(product.getStatus())
+                    .totalSales(product.getTotalSales())
+                    .rating(product.getRating())
+                    .thumbnailUrl(thumbnails.get(product.getId()))
+                    .defaultVariantId(variant != null ? variant.getId() : null)
+                    .defaultVariantSku(variant != null ? variant.getSku() : null)
+                    .price(variant != null ? variant.getPrice() : product.getBasePrice())
+                    .originalPrice(variant != null ? variant.getOriginalPrice() : null)
+                    .build();
+        }).collect(Collectors.toList());
     }
 
     private ProductDetailResponse buildProductDetail(Product product) {
-        List<ProductVariant> variants = productVariantRepository.findByProductIdAndIsActiveTrue(product.getId());
-        List<ProductVariantResponse> variantResponses = variants.stream()
+        List<ProductVariantResponse> variantResponses = productVariantRepository.findByProductIdAndIsActiveTrue(product.getId()).stream()
                 .map(v -> ProductVariantResponse.builder()
                         .id(v.getId())
                         .sku(v.getSku())
@@ -108,8 +122,7 @@ public class ProductServiceImpl implements ProductService {
                         .build())
                 .collect(Collectors.toList());
 
-        List<ProductImage> images = productImageRepository.findByProductIdOrderBySortOrderAsc(product.getId());
-        List<ProductImageResponse> imageResponses = images.stream()
+        List<ProductImageResponse> imageResponses = productImageRepository.findByProductIdOrderBySortOrderAsc(product.getId()).stream()
                 .map(img -> ProductImageResponse.builder()
                         .id(img.getId())
                         .imageUrl(img.getImageUrl())
@@ -139,5 +152,10 @@ public class ProductServiceImpl implements ProductService {
                 .variants(variantResponses)
                 .images(imageResponses)
                 .build();
+    }
+
+    /** Vô hiệu hóa ký tự đại diện của LIKE trong từ khóa người dùng nhập. */
+    private static String escapeLike(String keyword) {
+        return keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
     }
 }
